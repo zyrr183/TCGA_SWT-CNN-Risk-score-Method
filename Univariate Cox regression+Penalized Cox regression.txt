@@ -1,0 +1,52 @@
++------------------------------------------------Univariate Cox regression-----------------------------------------------------------------
+rm(list = ls())
+
+library(survival)
+library(plyr)
+library(glmnet)
+
+
+data_path = 'data/OV_top1000Gene.csv' 
+ana_data <- read.csv(data_path, sep = ',')
+
+uniSurv <- Surv(time = ana_data$overall_survival, event = ana_data$label)
+
+univariate_Cox_ana <- function(x){
+  FML <- as.formula(paste0('uniSurv~', x))
+  gene_ana <- coxph(FML, data = ana_data)
+  gene_sum <- summary(gene_ana)
+  HR <- round(gene_sum$coefficients[, 2], 2)
+  p_value <- round(gene_sum$coefficients[, 5], 15)
+  CI <- paste0(round(gene_sum$conf.int[, 3:4], 2), collapse = '-')
+  unicox <- data.frame('Characteristics' = x,
+                       'Hazard Ratio' = HR,
+                       'CI95' = CI,
+                       'P Value' = p_value)
+  return(unicox)
+}
+
+gene_manes <- colnames(ana_data)[c(4:103)]               #top n genes were used in the Cox proportional-hazards regression
+univars <- lapply(gene_manes, univariate_Cox_ana)
+univars <- ldply(univars, data.frame)
+
+
+write.table(univars, 'data/OV_clinical_SingleResult.csv', sep = ',', col.names = T, row.names = F)
+
++-----------------------------------------------------Penalized Cox regression------------------------------------------------------------------
+x<- ana_data[,c(univars$Characteristics[univars$P.Value < 0.05])+3]
+x <- as.matrix(x)
+y <- as.matrix(Surv(time=ana_data$overall_survival, event = ana_data$label))
+cvfit <- cv.glmnet(x , y, family = "cox", alpha=1)
+
+dev.new()                                
+png(file = "result/cvfit.png", width = 900, height = 900,res=200)
+plot(cvfit)
+dev.off()
+
+Coefficients <- coef(cvfit, s = "lambda.min")
+Active.Index <- which(Coefficients  != 0)
+Active.Coefficients <- Coefficients [Active.Index]
+Characteristics <- row.names(Coefficients)[Active.Index]
+
+output <- data.frame(Characteristics,Active.Coefficients)
+write.table(output, 'result/OV_penalized_cox_result.csv', sep = ',', col.names = T, row.names = F)
