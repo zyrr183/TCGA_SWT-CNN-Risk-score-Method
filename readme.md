@@ -41,4 +41,5 @@ Python model requirement:
 5) pandas
 6) numpy
 7) sklearn 
+
 Note:  The code files 5) and 6) are recommend execute on GPUs.
